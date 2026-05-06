@@ -1,150 +1,114 @@
-# Jenkins CI/CD Pipeline for React JS Application
 
-## Overview
-This Jenkins pipeline automates:
-- Source code checkout from GitHub
-- Docker image build for React JS application
-- Docker image push to registry
-- Kubernetes deployment
-- Docker image cleanup
-- Jenkins workspace cleanup
+# Jenkins Pipeline Guide - Docker Hub Integration
+
+## Table of Contents
+1. [Overview](#overview)
+2. [Complete Pipeline Code](#complete-pipeline-code)
+3. [Configuration](#configuration)
+4. [Stage Breakdown](#stage-breakdown)
+5. [Prerequisites](#prerequisites)
+6. [Setup Instructions](#setup-instructions)
+7. [Troubleshooting](#troubleshooting)
 
 ---
 
-# Jenkins Pipeline Script
+## Overview
+
+This Jenkins pipeline automates the CI/CD process:
+- ✅ Pulls code from GitHub
+- ✅ Builds Docker images
+- ✅ Pushes to Docker Hub
+- ✅ Deploys to Kubernetes
+
+---
+
+## Complete Pipeline Code
 
 ```groovy
 pipeline {
-
     environment {
         REPOSITORY="https://github.com/Mounesh018"
         GIT_CREDENTIALS="ARC_SSH"
+        DOCKER_REGISTRY="docker.io"
+        DOCKER_NAMESPACE="your-docker-hub-username"  // Replace with your Docker Hub username
+        IMAGE_NAME="${DOCKER_NAMESPACE}/${SERVICE}"
     }
-
+ 
     parameters {
-
-        choice(
-            name: 'SERVICE',
-            choices: 'test-pipeline-demo',
-            description: 'Select Frontend'
-        )
-
-        string(
-            name: 'BRANCH',
-            defaultValue: 'test',
-            description: 'Provide branch name'
-        )
-
-        choice(
-            name: 'DEPLOY_TARGET',
-            choices: 'test-pipeline-demo',
-            description: 'Deploy To'
-        )
+        choice(name: 'SERVICE', choices: 'test-pipeline-demo', description: 'Select Frontend')
+        string(name: 'BRANCH', defaultValue: 'test', description: 'Provide branch name')
+        choice(name: 'DEPLOY_TARGET', choices: 'test-pipeline-demo', description: 'Deploy To')
     }
-
-    agent {
-        label "${DEPLOY_TARGET}"
-    }
-
+ 
+    agent {label "${DEPLOY_TARGET}"}
+ 
     stages {
-
         stage ("Git Pull") {
-
             steps {
-
                 script {
-
                     dir("${SERVICE}") {
-
-                        git credentialsId: "$GIT_CREDENTIALS",
-                            url: "$REPOSITORY/$SERVICE",
+                        git credentialsId: "$GIT_CREDENTIALS", 
+                            url: "$REPOSITORY/$SERVICE", 
                             branch: "$BRANCH"
                     }
                 }
             }
         }
-
-        stage('docker build') {
-
+        
+        stage('Docker Build') {
             steps {
-
                 script {
-
                     dir("${SERVICE}") {
-
-                        sh 'docker build -f Dockerfile -t $SERVICE .'
+                        sh 'docker build -f Dockerfile -t ${IMAGE_NAME}:latest -t ${IMAGE_NAME}:${BUILD_NUMBER} .'
                     }
                 }
             }
         }
-
-        stage('docker push') {
-
+        
+        stage('Docker Push to Hub') {
             steps {
-
                 script {
-
                     dir("${SERVICE}") {
-
-                        withCredentials([
-                            usernamePassword(
-                                credentialsId: 'git-cred',
-                                usernameVariable: 'DOCKER_USER',
-                                passwordVariable: 'DOCKER_PASS'
-                            )
-                        ]) {
-
+                        withCredentials([usernamePassword(credentialsId: 'docker-hub-cred',
+                                                        usernameVariable: 'DOCKER_USER',
+                                                        passwordVariable: 'DOCKER_PASS')]) {
                             sh '''
-
-                                echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin registry.gitlab.com
-
-                                docker tag $SERVICE:latest registry.github.com/test-pipeline-demo/apps/$SERVICE
-
-                                docker push registry.github.com/test-pipeline-demo/apps/$SERVICE
-
+                                echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                                docker push ${IMAGE_NAME}:latest
+                                docker push ${IMAGE_NAME}:${BUILD_NUMBER}
                             '''
                         }
                     }
                 }
             }
         }
-
-        stage ('Docker Clean') {
-
+ 
+        stage('Docker Clean') {
             steps {
-
                 script {
-
-                    sh 'docker image rm registry.github.com/test-pipeline-demo/apps/$SERVICE:latest'
+                    sh '''
+                        docker image rm ${IMAGE_NAME}:latest
+                        docker image rm ${IMAGE_NAME}:${BUILD_NUMBER}
+                    '''
                 }
             }
         }
-
-        stage ('Deploy k8') {
-
+        
+        stage('Deploy to K8s') {
             steps {
-
                 sh '''#!/bin/bash
-
                     cd /root/k8script/services
-
                     pwd
-
-                    kubectl delete -f $SERVICE-deploy.yml
-
+                    kubectl delete -f ${SERVICE}-deploy.yml
                     sleep 5
-
-                    kubectl create -f $SERVICE-deploy.yml
-
+                    kubectl create -f ${SERVICE}-deploy.yml
                 '''
             }
-        }
+        }   
     }
-
-    post {
-
-        always {
-
+    
+    post { 
+        always { 
             cleanWs()
         }
     }
@@ -153,394 +117,384 @@ pipeline {
 
 ---
 
-# CI/CD Pipeline Flow
+## Configuration
 
-```text
-GitHub Repository
-        ↓
-Jenkins Pipeline
-        ↓
-Git Pull
-        ↓
-Docker Build
-        ↓
-Docker Push
-        ↓
-Kubernetes Deployment
-        ↓
-Application Running
-```
+### Environment Variables
 
----
+| Variable | Value | Description |
+|----------|-------|-------------|
+| `REPOSITORY` | `https://github.com/Mounesh018` | GitHub repository base URL |
+| `GIT_CREDENTIALS` | `ARC_SSH` | Jenkins credential ID for Git SSH key |
+| `DOCKER_REGISTRY` | `docker.io` | Docker Hub registry (default) |
+| `DOCKER_NAMESPACE` | `your-docker-hub-username` | Your Docker Hub username |
+| `IMAGE_NAME` | `${DOCKER_NAMESPACE}/${SERVICE}` | Full Docker image name |
 
-# Step-by-Step Pipeline Explanation
+### Pipeline Parameters
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `SERVICE` | Choice | test-pipeline-demo | Service/application name |
+| `BRANCH` | String | test | Git branch to build |
+| `DEPLOY_TARGET` | Choice | test-pipeline-demo | Jenkins agent label |
 
 ---
 
-# 1. Environment Variables
+## Stage Breakdown
+
+### Stage 1: Git Pull
+
+**Purpose:** Clone source code from GitHub repository
 
 ```groovy
-environment {
-    REPOSITORY="https://github.com/Mounesh018"
-    GIT_CREDENTIALS="ARC_SSH"
-}
-```
-
-## Purpose
-Stores common variables used throughout pipeline.
-
-### Variables
-
-| Variable | Purpose |
-|---|---|
-| REPOSITORY | GitHub repository URL |
-| GIT_CREDENTIALS | Jenkins Git credentials ID |
-
----
-
-# 2. Pipeline Parameters
-
-```groovy
-parameters {
-    choice(name: 'SERVICE', choices: 'test-pipeline-demo', description: 'Select Frontend')
-
-    string(name: 'BRANCH', defaultValue: 'test', description: 'Provide branch name')
-
-    choice(name: 'DEPLOY_TARGET', choices: 'test-pipeline-demo', description: 'Deploy To')
-}
-```
-
-## Purpose
-Allows dynamic input while triggering pipeline.
-
-### Parameters
-
-| Parameter | Purpose |
-|---|---|
-| SERVICE | Application name |
-| BRANCH | Git branch name |
-| DEPLOY_TARGET | Jenkins agent/server |
-
----
-
-# 3. Jenkins Agent
-
-```groovy
-agent {
-    label "${DEPLOY_TARGET}"
-}
-```
-
-## Purpose
-Selects Jenkins node dynamically based on parameter.
-
-### Example
-```text
-test-pipeline-demo
-```
-
-Pipeline executes on matching Jenkins agent.
-
----
-
-# 4. Git Pull Stage
-
-```groovy
-stage ("Git Pull")
-```
-
-## Purpose
-Pulls source code from GitHub repository.
-
-### Commands Used
-
-```groovy
-git credentialsId: "$GIT_CREDENTIALS",
-    url: "$REPOSITORY/$SERVICE",
-    branch: "$BRANCH"
-```
-
-### What Happens?
-- Connects to GitHub
-- Authenticates using Jenkins credentials
-- Clones selected branch
-
----
-
-# 5. Docker Build Stage
-
-```groovy
-stage('docker build')
-```
-
-## Purpose
-Builds Docker image for React JS application.
-
-### Command
-
-```bash
-docker build -f Dockerfile -t $SERVICE .
-```
-
-### Example
-
-```bash
-docker build -f Dockerfile -t test-pipeline-demo .
-```
-
-### What Happens?
-- Reads Dockerfile
-- Installs dependencies
-- Builds React application
-- Creates Docker image
-
----
-
-# 6. Docker Push Stage
-
-```groovy
-stage('docker push')
-```
-
-## Purpose
-Pushes Docker image to registry.
-
----
-
-## Docker Login
-
-```bash
-docker login
-```
-
-Uses Jenkins credentials:
-- Username
-- Password
-
----
-
-## Docker Tag
-
-```bash
-docker tag $SERVICE:latest registry.github.com/test-pipeline-demo/apps/$SERVICE
-```
-
-### Purpose
-Creates registry-compatible image tag.
-
----
-
-## Docker Push
-
-```bash
-docker push registry.github.com/test-pipeline-demo/apps/$SERVICE
-```
-
-### Purpose
-Uploads image into Docker registry.
-
----
-
-# 7. Docker Clean Stage
-
-```groovy
-stage ('Docker Clean')
-```
-
-## Purpose
-Removes local Docker image after push.
-
-### Command
-
-```bash
-docker image rm registry.github.com/test-pipeline-demo/apps/$SERVICE:latest
-```
-
-### Benefits
-- Frees server storage
-- Reduces unused images
-
----
-
-# 8. Kubernetes Deployment Stage
-
-```groovy
-stage ('Deploy k8')
-```
-
-## Purpose
-Deploys React application into Kubernetes cluster.
-
----
-
-## Commands Used
-
-```bash
-cd /root/k8script/services
-
-kubectl delete -f $SERVICE-deploy.yml
-
-sleep 5
-
-kubectl create -f $SERVICE-deploy.yml
-```
-
----
-
-## Deployment Flow
-
-```text
-Delete Existing Deployment
-            ↓
-Wait 5 Seconds
-            ↓
-Create New Deployment
-```
-
----
-
-# 9. Post Cleanup Stage
-
-```groovy
-post {
-    always {
-        cleanWs()
+stage ("Git Pull") {
+    steps {
+        script {
+            dir("${SERVICE}") {
+                git credentialsId: "$GIT_CREDENTIALS", 
+                    url: "$REPOSITORY/$SERVICE", 
+                    branch: "$BRANCH"
+            }
+        }
     }
 }
 ```
 
-## Purpose
-Cleans Jenkins workspace after pipeline execution.
+**What happens:**
+- Creates directory with service name
+- Clones repository using SSH credentials
+- Checks out specified branch
 
-### Benefits
-- Removes temporary files
-- Frees disk space
-- Keeps Jenkins clean
-
----
-
-# Required Jenkins Credentials
-
-| Credential ID | Purpose |
-|---|---|
-| ARC_SSH | GitHub repository access |
-| git-cred | Docker registry login |
+**Example URL:** `https://github.com/Mounesh018/test-pipeline-demo`
 
 ---
 
-# Required Software
+### Stage 2: Docker Build
 
-| Tool | Purpose |
-|---|---|
-| Jenkins | CI/CD automation |
-| Docker | Containerization |
-| Kubernetes | Container orchestration |
-| kubectl | Kubernetes command tool |
-| Git | Source code management |
+**Purpose:** Build Docker image from Dockerfile
 
----
+```groovy
+stage('Docker Build') {
+    steps {
+        script {
+            dir("${SERVICE}") {
+                sh 'docker build -f Dockerfile -t ${IMAGE_NAME}:latest -t ${IMAGE_NAME}:${BUILD_NUMBER} .'
+            }
+        }
+    }
+}
+```
 
-# Required Files
+**What happens:**
+- Reads `Dockerfile` from repository
+- Creates image with two tags:
+  - `latest` tag (always points to newest build)
+  - `BUILD_NUMBER` tag (numbered version for tracking)
 
-```text
-project/
-│
-├── Dockerfile
-├── Jenkinsfile
-├── package.json
-├── src/
-├── public/
-└── k8/
+**Example Tags:**
+```
+myusername/test-pipeline-demo:latest
+myusername/test-pipeline-demo:42
 ```
 
 ---
 
-# Kubernetes Deployment YAML Example
+### Stage 3: Docker Push to Hub
+
+**Purpose:** Authenticate with Docker Hub and push images
+
+```groovy
+stage('Docker Push to Hub') {
+    steps {
+        script {
+            dir("${SERVICE}") {
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-cred',
+                                                usernameVariable: 'DOCKER_USER',
+                                                passwordVariable: 'DOCKER_PASS')]) {
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        docker push ${IMAGE_NAME}:latest
+                        docker push ${IMAGE_NAME}:${BUILD_NUMBER}
+                    '''
+                }
+            }
+        }
+    }
+}
+```
+
+**What happens:**
+1. Retrieves Docker Hub credentials securely
+2. Logs in to Docker Hub (no password shown in logs)
+3. Pushes both `latest` and `BUILD_NUMBER` tagged images
+
+**Security Note:** Uses `--password-stdin` to prevent password from being visible in logs
+
+---
+
+### Stage 4: Docker Clean
+
+**Purpose:** Remove local Docker images to free disk space
+
+```groovy
+stage('Docker Clean') {
+    steps {
+        script {
+            sh '''
+                docker image rm ${IMAGE_NAME}:latest
+                docker image rm ${IMAGE_NAME}:${BUILD_NUMBER}
+            '''
+        }
+    }
+}
+```
+
+**What happens:**
+- Removes `latest` tag image locally
+- Removes `BUILD_NUMBER` tag image locally
+- Images remain on Docker Hub (safe to delete locally)
+
+---
+
+### Stage 5: Deploy to K8s
+
+**Purpose:** Update Kubernetes deployment with new image
+
+```groovy
+stage('Deploy to K8s') {
+    steps {
+        sh '''#!/bin/bash
+            cd /root/k8script/services
+            pwd
+            kubectl delete -f ${SERVICE}-deploy.yml
+            sleep 5
+            kubectl create -f ${SERVICE}-deploy.yml
+        '''
+    }
+}
+```
+
+**What happens:**
+1. Changes to Kubernetes manifests directory
+2. Deletes old deployment
+3. Waits 5 seconds for graceful shutdown
+4. Creates new deployment with updated image
+
+**File:** `test-pipeline-demo-deploy.yml`
+
+---
+
+## Prerequisites
+
+### Jenkins Setup
+- [ ] Jenkins instance with Docker installed
+- [ ] Jenkins agent with label matching `DEPLOY_TARGET`
+- [ ] Docker CLI available on agent
+- [ ] Kubectl installed on agent
+
+### GitHub Setup
+- [ ] SSH key generated and added to GitHub account
+- [ ] Repository accessible via SSH
+
+### Docker Hub Setup
+- [ ] Docker Hub account created
+- [ ] Personal Access Token generated (recommended over password)
+
+### Kubernetes Setup
+- [ ] Kubeconfig configured on Jenkins agent
+- [ ] Deployment files at `/root/k8script/services/{SERVICE}-deploy.yml`
+- [ ] Deployment references Docker Hub image
+
+---
+
+## Setup Instructions
+
+### Step 1: Add SSH Credentials (Git)
+
+1. Go to Jenkins → Manage Jenkins → Credentials
+2. Click "New credentials"
+3. Fill in:
+   - **Kind:** SSH Username with private key
+   - **ID:** `ARC_SSH`
+   - **Username:** `git`
+   - **Private Key:** Paste your GitHub SSH private key
+4. Click Save
+
+### Step 2: Add Docker Hub Credentials
+
+1. Go to Jenkins → Manage Jenkins → Credentials
+2. Click "New credentials"
+3. Fill in:
+   - **Kind:** Username with password
+   - **ID:** `docker-hub-cred`
+   - **Username:** Your Docker Hub username
+   - **Password:** Your Docker Hub Personal Access Token
+4. Click Save
+
+**To create a Personal Access Token:**
+1. Go to Docker Hub → Account Settings → Security
+2. Click "New Access Token"
+3. Give it a descriptive name
+4. Copy the token and use as password in Jenkins
+
+### Step 3: Create Jenkins Pipeline Job
+
+1. Click "New Item"
+2. Enter job name
+3. Select "Pipeline"
+4. Click OK
+5. In "Pipeline" section, select "Pipeline script"
+6. Paste the complete pipeline code above
+7. Replace `your-docker-hub-username` with your actual Docker Hub username
+8. Click Save
+
+### Step 4: Update Kubernetes Deployment File
+
+Create `/root/k8script/services/test-pipeline-demo-deploy.yml`:
 
 ```yaml
 apiVersion: apps/v1
-
 kind: Deployment
-
 metadata:
-  name: react-app
-
+  name: test-pipeline-demo
 spec:
-  replicas: 1
-
+  replicas: 3
   selector:
     matchLabels:
-      app: react-app
-
+      app: test-pipeline-demo
   template:
     metadata:
       labels:
-        app: react-app
-
+        app: test-pipeline-demo
     spec:
       containers:
-      - name: react-app
-        image: registry.github.com/test-pipeline-demo/apps/react-app
+      - name: app
+        image: your-docker-hub-username/test-pipeline-demo:latest
+        imagePullPolicy: Always
         ports:
-        - containerPort: 80
+        - containerPort: 8080
 ```
 
+**Important:** Replace `your-docker-hub-username` with your actual Docker Hub username
+
 ---
 
-# Complete CI/CD Architecture
+## Troubleshooting
 
-```text
-Developer Push Code
-            ↓
-GitHub Repository
-            ↓
-Jenkins Trigger
-            ↓
-Build Docker Image
-            ↓
-Push Docker Image
-            ↓
-Deploy to Kubernetes
-            ↓
-React Application Running
+### Issue: "docker login" fails
+
+**Solution:**
+- Verify Docker Hub credentials in Jenkins
+- Check if using Personal Access Token (not password)
+- Ensure credential ID matches `docker-hub-cred`
+
+```groovy
+// Test locally first
+echo "YOUR_TOKEN" | docker login -u "your-username" --password-stdin
 ```
 
----
+### Issue: Git clone fails with SSH key error
 
-# Advantages of This Pipeline
+**Solution:**
+- Verify SSH key is added to GitHub account
+- Check Jenkins credential ID is `ARC_SSH`
+- Ensure repository URL is correct format
 
-| Feature | Benefit |
-|---|---|
-| Automation | Reduces manual deployment |
-| Faster Delivery | Quick deployment |
-| Consistency | Same deployment every time |
-| Scalability | Kubernetes support |
-| Clean Environment | Workspace cleanup |
-
----
-
-# Important Notes
-
-- Docker service must be running
-- Kubernetes cluster must be accessible
-- Jenkins agent label must exist
-- Deployment YAML must exist:
-  
 ```bash
-/root/k8script/services
+# Test SSH connection
+ssh -T git@github.com
 ```
 
-- Ensure Docker registry access is available
+### Issue: Kubernetes deployment fails
+
+**Solution:**
+- Check kubeconfig is accessible on Jenkins agent
+- Verify deployment file exists at correct path
+- Check image name matches in YAML
+
+```bash
+# Test kubectl access
+kubectl get deployments
+```
+
+### Issue: "docker image rm" fails during clean
+
+**Solution:**
+- Image might still be in use
+- Can safely ignore this error
+- Add `|| true` to continue on error
+
+```groovy
+sh 'docker image rm ${IMAGE_NAME}:latest || true'
+```
+
+### Issue: Out of disk space
+
+**Solution:**
+- Docker Clean stage not running
+- Manually clean old images
+
+```bash
+# On Jenkins agent
+docker system prune -a --force
+```
 
 ---
 
-# Summary
+## Variables Reference
 
-This Jenkins CI/CD pipeline:
-- Pulls React JS source code
-- Builds Docker image
-- Pushes image into registry
-- Deploys application into Kubernetes
-- Cleans Docker images
-- Cleans Jenkins workspace
-- Provides automated production deployment
+| Variable | Example | Where Used |
+|----------|---------|-----------|
+| `${SERVICE}` | test-pipeline-demo | All stages |
+| `${BRANCH}` | test | Git Pull stage |
+| `${DEPLOY_TARGET}` | test-pipeline-demo | Agent label |
+| `${BUILD_NUMBER}` | 42 | Docker Build & Push |
+| `${IMAGE_NAME}` | myuser/test-pipeline-demo | Docker stages |
+
+---
+
+## Best Practices
+
+1. **Always use Personal Access Tokens** instead of passwords in Jenkins
+2. **Tag images with build number** for version tracking
+3. **Use `latest` tag** for quick rollback capability
+4. **Test locally first** before adding to pipeline
+5. **Keep Kubernetes manifests in Git** for version control
+6. **Use namespaces** to isolate deployments in Kubernetes
+7. **Monitor Jenkins agent disk space** - Docker images consume space
+8. **Use image pull policy** `Always` to get latest image
+
+---
+
+## Example Execution Flow
+
+```
+User triggers build with:
+├── SERVICE: test-pipeline-demo
+├── BRANCH: test
+└── DEPLOY_TARGET: test-pipeline-demo
+
+Pipeline executes:
+├── Git Pull
+│   └── Clones github.com/Mounesh018/test-pipeline-demo
+├── Docker Build
+│   └── Creates myuser/test-pipeline-demo:42 & :latest
+├── Docker Push to Hub
+│   └── Uploads both images to Docker Hub
+├── Docker Clean
+│   └── Deletes local images
+└── Deploy to K8s
+    └── Updates Kubernetes with new image
+
+Post Actions:
+└── Clean workspace
+```
+
+---
+
+## Contact & Support
+
+For issues or questions, check:
+- Jenkins logs: Jenkins UI → Build logs
+- Docker logs: `docker logs <container-id>`
+- Kubernetes logs: `kubectl logs <pod-name>`
+- Docker Hub: Check image push status

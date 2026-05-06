@@ -2,6 +2,9 @@ pipeline {
     environment {
         REPOSITORY="https://github.com/Mounesh018"
         GIT_CREDENTIALS="ARC_SSH"
+        DOCKER_REGISTRY="docker.io"
+        DOCKER_NAMESPACE="your-docker-hub-username"  // Replace with your Docker Hub username
+        IMAGE_NAME="${DOCKER_NAMESPACE}/${SERVICE}"
     }
  
     parameters {
@@ -22,52 +25,59 @@ pipeline {
                 }
             }
         }
-        stage('docker build') {
+        
+        stage('Docker Build') {
             steps {
                 script {
                     dir("${SERVICE}") {
-                  sh 'docker build -f Dockerfile -t $SERVICE .'
+                        sh 'docker build -f Dockerfile -t ${IMAGE_NAME}:latest -t ${IMAGE_NAME}:${BUILD_NUMBER} .'
+                    }
                 }
             }
+        }
+        
+        stage('Docker Push to Hub') {
+            steps {
+                script {
+                    dir("${SERVICE}") {
+                        withCredentials([usernamePassword(credentialsId: 'docker-hub-cred',
+                                                        usernameVariable: 'DOCKER_USER',
+                                                        passwordVariable: 'DOCKER_PASS')]) {
+                            sh '''
+                                echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                                docker push ${IMAGE_NAME}:latest
+                                docker push ${IMAGE_NAME}:${BUILD_NUMBER}
+                            '''
+                        }
+                    }
+                }
             }
         }
-        stage('docker push') {
-          steps {
-            script {
-              dir("${SERVICE}") {
-                 withCredentials([usernamePassword(credentialsId: 'git-cred',
-                                                 usernameVariable: 'DOCKER_USER',
-                                                 passwordVariable: 'DOCKER_PASS')]) {
+ 
+        stage('Docker Clean') {
+            steps {
+                script {
                     sh '''
-                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin registry.gitlab.com
-                        docker tag $SERVICE:latest registry.github.com/test-pipeline-demo/apps/$SERVICE
-                        docker push registry.github.com/test-pipeline-demo/apps/$SERVICE
+                        docker image rm ${IMAGE_NAME}:latest
+                        docker image rm ${IMAGE_NAME}:${BUILD_NUMBER}
                     '''
                 }
             }
         }
-    }
-}
- 
-        stage ('Docker Clean'){
-            steps {
-            script{
-                sh 'docker image rm registry.github.com/test-pipeline-demo/apps/$SERVICE:latest'
-            }
-            }
-        }
-          stage ('Deploy k8'){
+        
+        stage('Deploy to K8s') {
             steps {
                 sh '''#!/bin/bash
-                cd /root/k8script/services
-                pwd
-                kubectl delete -f $SERVICE-deploy.yml
-                sleep 5
-                kubectl create -f $SERVICE-deploy.yml
+                    cd /root/k8script/services
+                    pwd
+                    kubectl delete -f ${SERVICE}-deploy.yml
+                    sleep 5
+                    kubectl create -f ${SERVICE}-deploy.yml
                 '''
             }
         }   
     }
+    
     post { 
         always { 
             cleanWs()
