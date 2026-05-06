@@ -1,13 +1,13 @@
 pipeline {
     environment {
-        REPOSITORY="git@gitlab.com:tenjinonline/apps"
+        REPOSITORY="https://github.com/Mounesh018"
         GIT_CREDENTIALS="ARC_SSH"
     }
  
     parameters {
-        choice(name: 'SERVICE', choices: 'tplus-frontend\ncos-frontend\ntplus-mfe-nginx\ntenjin-online\nto-customer-onboarding-web\ncms-nginx', description: 'Select Frontend')
-        string(name: 'BRANCH', defaultValue: 'release-2.0', description: 'Provide branch name')
-        choice(name: 'DEPLOY_TARGET', choices: 'tenjin-online-test-1', description: 'Deploy To')
+        choice(name: 'SERVICE', choices: 'test-pipeline-demo', description: 'Select Frontend')
+        string(name: 'BRANCH', defaultValue: 'test', description: 'Provide branch name')
+        choice(name: 'DEPLOY_TARGET', choices: 'test-pipeline-demo', description: 'Deploy To')
     }
  
     agent {label "${DEPLOY_TARGET}"}
@@ -41,8 +41,8 @@ pipeline {
                                                  passwordVariable: 'DOCKER_PASS')]) {
                     sh '''
                         echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin registry.gitlab.com
-                        docker tag $SERVICE:latest registry.gitlab.com/tenjinonline/apps/$SERVICE
-                        docker push registry.gitlab.com/tenjinonline/apps/$SERVICE
+                        docker tag $SERVICE:latest registry.github.com/test-pipeline-demo/apps/$SERVICE
+                        docker push registry.github.com/test-pipeline-demo/apps/$SERVICE
                     '''
                 }
             }
@@ -53,7 +53,7 @@ pipeline {
         stage ('Docker Clean'){
             steps {
             script{
-                sh 'docker image rm registry.gitlab.com/tenjinonline/apps/$SERVICE:latest'
+                sh 'docker image rm registry.github.com/test-pipeline-demo/apps/$SERVICE:latest'
             }
             }
         }
