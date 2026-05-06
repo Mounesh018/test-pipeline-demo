@@ -408,12 +408,3 @@ coverage
 
 ---
 
-# Summary
-
-This Dockerfile:
-- Builds React JS application
-- Creates optimized production build
-- Uses Nginx for hosting
-- Uses multi-stage Docker build
-- Creates lightweight production image
-- Suitable for Kubernetes and Docker deployments
