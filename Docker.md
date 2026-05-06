@@ -388,23 +388,3 @@ server {
 
 ---
 
-# Important Notes
-
-- Ensure React build succeeds before deployment
-- Ensure nginx.conf exists
-- Use `.dockerignore` to reduce image size
-- Keep Node and Nginx versions updated
-
----
-
-# Recommended .dockerignore
-
-```text
-node_modules
-.git
-build
-coverage
-```
-
----
-
