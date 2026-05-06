@@ -26,7 +26,6 @@ pipeline {
             steps {
                 script {
                     dir("${SERVICE}") {
-                //   sh 'docker build -f Dockerfile.dev -t $SERVICE .'
                   sh 'docker build -f Dockerfile -t $SERVICE .'
                 }
             }
@@ -36,7 +35,7 @@ pipeline {
           steps {
             script {
               dir("${SERVICE}") {
-                 withCredentials([usernamePassword(credentialsId: 'git-on',
+                 withCredentials([usernamePassword(credentialsId: 'git-cred',
                                                  usernameVariable: 'DOCKER_USER',
                                                  passwordVariable: 'DOCKER_PASS')]) {
                     sh '''
